@@ -20,15 +20,20 @@
 package org.apache.synapse.mediators.ext;
 
 import org.apache.axis2.AxisFault;
+import org.apache.synapse.ContinuationState;
 import org.apache.synapse.ManagedLifecycle;
 import org.apache.synapse.Mediator;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.SynapseException;
 import org.apache.synapse.SynapseLog;
+import org.apache.synapse.aspects.flow.statistics.collectors.RuntimeStatisticCollector;
 import org.apache.synapse.config.xml.PropertyHelper;
 import org.apache.synapse.config.xml.SynapsePath;
+import org.apache.synapse.continuation.ContinuationStackManager;
+import org.apache.synapse.continuation.ReliantContinuationState;
 import org.apache.synapse.core.SynapseEnvironment;
 import org.apache.synapse.mediators.AbstractMediator;
+import org.apache.synapse.mediators.FlowContinuableMediator;
 import org.apache.synapse.mediators.MediatorProperty;
 import org.apache.synapse.mediators.v2.Utils;
 import org.apache.synapse.mediators.v2.ext.AbstractClassMediator;
@@ -51,7 +56,7 @@ import java.util.Map;
  * 
  * @see Mediator
  */
-public class ClassMediator extends AbstractMediator implements ManagedLifecycle {
+public class ClassMediator extends AbstractMediator implements FlowContinuableMediator, ManagedLifecycle {
 
     /** The reference to the actual class that implments the Mediator interface */
     private Mediator mediator = null;
@@ -100,6 +105,8 @@ public class ClassMediator extends AbstractMediator implements ManagedLifecycle 
         boolean result;
 
         try {
+//            ContinuationStackManager.addReliantContinuationState(synCtx, 0, getMediatorPosition());
+            ContinuationStackManager.updateSeqContinuationState(synCtx, getMediatorPosition());
             if (mediator instanceof AbstractClassMediator) {
                 result = invokeClassMediatorV2(synCtx);
             } else {
@@ -111,6 +118,9 @@ public class ClassMediator extends AbstractMediator implements ManagedLifecycle 
                     result = updateInstancePropertiesAndMediate(synCtx);
                 }
             }
+//            if (result) {
+//                ContinuationStackManager.removeReliantContinuationState(synCtx);
+//            }
         } catch (Exception e) {
             // throw Synapse Exception for any exception in class meditor
             // so that the fault handler will be invoked
@@ -119,6 +129,23 @@ public class ClassMediator extends AbstractMediator implements ManagedLifecycle 
 
         synLog.traceOrDebug("End : Class mediator");
         
+        return result;
+    }
+
+    @Override
+    public boolean mediate(MessageContext synCtx, ContinuationState continuationState) {
+
+        int subBranch = ((ReliantContinuationState) continuationState).getSubBranch();
+        boolean result = true;
+        if (subBranch == 0) {
+//            if(continuationState.hasChild()){
+               FlowContinuableMediator mediator = (FlowContinuableMediator) this.mediator;
+               result = mediator.mediate(synCtx, continuationState);
+//               if (result) {
+//                   ContinuationStackManager.removeReliantContinuationState(synCtx);
+//               }
+//            }
+        }
         return result;
     }
 

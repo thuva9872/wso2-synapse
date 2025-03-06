@@ -263,7 +263,7 @@ public class InvokeMediator extends AbstractMediator implements
 				        (FlowContinuableMediator) templateMediator.getChild(continuationState.getPosition());
 
 		        result = mediator.mediate(synCtx, continuationState.getChildContState());
-				postMediate(synCtx);
+//				postMediate(synCtx);
 
 				if (isStatisticsEnabled) {
 					((Mediator) mediator).reportCloseStatistics(synCtx, null);
