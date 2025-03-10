@@ -98,13 +98,17 @@ public class TemplateContext {
                         paramValue = defaultValue;
                     }
                 }
-            } else {
+            } else if(propertyValue instanceof Value) {
                 try {
                     paramValue = getEvaluatedParamValue(synCtxt, parameterName, (Value) propertyValue);
                 } catch (IOException | XMLStreamException e) {
                     throw new SynapseException("Error while evaluating parameters"
                             + " passed to template " + fName, e);
                 }
+            } else if(propertyValue instanceof ConnectorParam) {
+                    paramValue = getEvaluatedParamValue(synCtxt, parameterName, (ConnectorParam) propertyValue);
+            } else {
+                paramValue = propertyValue;
             }
             if (paramValue != null) {
                 mappedValues.put(parameterName, paramValue);
@@ -112,6 +116,40 @@ public class TemplateContext {
             //remove temp property from the context
             removeProperty(synCtxt, mapping);
         }
+    }
+
+    private ResolvedConnectorParam getEvaluatedParamValue(MessageContext synCtx, String parameterName, ConnectorParam propertyValue) {
+
+        ResolvedConnectorParam resolvedParam = new ResolvedConnectorParam();
+        resolvedParam.setParamName(parameterName);
+        if(propertyValue.getInlineValue() != null){
+            try {
+                Object value = getEvaluatedParamValue(synCtx, parameterName, propertyValue.getInlineValue());
+                resolvedParam.setInlineValue(new ValueHolder(propertyValue.getInlineValue(), value));
+            } catch (IOException | XMLStreamException e) {
+                throw new SynapseException("Error while evaluating parameters"
+                        + " passed to template " + fName, e);
+            }
+        }
+        Iterator<String> attributeKeys = propertyValue.getAttributeName2ExpressionMap().keySet().iterator();
+        while (attributeKeys.hasNext()) {
+            String attributeName = attributeKeys.next();
+            Value expression = propertyValue.getAttributeName2ExpressionMap().get(attributeName);
+            try {
+                Object value = getEvaluatedParamValue(synCtx, parameterName, expression);
+                resolvedParam.addAttributeMapping(attributeName, new ValueHolder(expression,value));
+            } catch (IOException | XMLStreamException e) {
+                throw new SynapseException("Error while evaluating parameters"
+                        + " passed to template " + fName, e);
+            }
+        }
+        Iterator<ConnectorParam> childParams = propertyValue.getChildParams().iterator();
+        while (childParams.hasNext()) {
+            ConnectorParam childParam = childParams.next();
+            ResolvedConnectorParam value = getEvaluatedParamValue(synCtx, parameterName, childParam);
+            resolvedParam.addChildParam(value);
+        }
+        return resolvedParam;
     }
 
     /**

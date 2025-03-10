@@ -221,6 +221,12 @@ public class EIPUtils {
         return templateName + ":" + parameter;
     }
 
+//    public static void createSynapseEIPTemplateProperty(MessageContext synCtxt, String templateName,
+//                                                        String  paramName, Object value) {
+//        String targetSynapsePropName = getTemplatePropertyMapping(templateName,paramName);
+//        synCtxt.setProperty(targetSynapsePropName,value);
+//    }
+
     public static void createSynapseEIPTemplateProperty(MessageContext synCtxt, String templateName,
                                                         String  paramName, Object value) {
         String targetSynapsePropName = getTemplatePropertyMapping(templateName,paramName);

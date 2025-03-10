@@ -60,6 +60,12 @@ public class Utils {
         return isScatterMessage != null && isScatterMessage;
     }
 
+    public static boolean isAgentToolExecution(MessageContext synCtx) {
+
+        Boolean isAgentToolExecution = (Boolean) synCtx.getProperty(SynapseConstants.IS_AGENT_TOOL_EXECUTION);
+        return isAgentToolExecution != null && isAgentToolExecution;
+    }
+
     /**
      * Check whether the message is a foreach message or not
      *

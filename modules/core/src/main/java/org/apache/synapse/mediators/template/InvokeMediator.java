@@ -94,6 +94,7 @@ public class InvokeMediator extends AbstractMediator implements
 	 */
 	private Map<String, Value> pName2ExpressionMap;
 
+	private Map<String, ConnectorParam> pName2ParamMap;
 	private boolean dynamicMediator = false;
 	
 	private Value key = null;
@@ -108,6 +109,7 @@ public class InvokeMediator extends AbstractMediator implements
 	public InvokeMediator() {
 		// LinkedHashMap is used to preserve tag order
 		pName2ExpressionMap = new LinkedHashMap<String, Value>();
+		pName2ParamMap = new LinkedHashMap<>();
 	}
 
     public boolean mediate(MessageContext synCtx) {
@@ -221,7 +223,7 @@ public class InvokeMediator extends AbstractMediator implements
 	@Override
 	public boolean isContentAware() {
 		//evaluate parameters with expression
-		Iterator<String> parameterNames = pName2ExpressionMap.keySet().iterator();
+		Iterator<String> parameterNames = pName2ParamMap.keySet().iterator();
 		while (parameterNames.hasNext()) {
 			String parameterName = parameterNames.next();
 			if (!"".equals(parameterName)) {
@@ -229,9 +231,44 @@ public class InvokeMediator extends AbstractMediator implements
 						SynapseConstants.OVERWRITE_BODY.equals(parameterName)) {
 					return true;
 				}
-				Value parameter = pName2ExpressionMap.get(parameterName);
-				SynapsePath expression = parameter.getExpression();
-				if (expression != null && expression.isContentAware()) {
+				ConnectorParam parameter = pName2ParamMap.get(parameterName);
+				return isContentAware(parameter);
+//				SynapsePath expression = parameter.getInlineValue();
+//				if (expression != null && expression.isContentAware()) {
+//					return true;
+//				}
+			}
+		}
+		return false;
+	}
+
+	private boolean isContentAware(ConnectorParam param) {
+
+		if (param == null) {
+			return false;
+		}
+		SynapsePath inlineValueExpression = param.getInlineValue().getExpression();
+		if (inlineValueExpression != null && inlineValueExpression.isContentAware()) {
+			return true;
+		}
+		if(param.getAttributeName2ExpressionMap() != null) {
+			Iterator<String> attributeNames = param.getAttributeName2ExpressionMap().keySet().iterator();
+			while (attributeNames.hasNext()) {
+				String attributeName = attributeNames.next();
+				if (!"".equals(attributeName)) {
+					Value attributeValue = param.getAttributeName2ExpressionMap().get(attributeName);
+					if (attributeValue != null && attributeValue.getExpression() != null &&
+							attributeValue.getExpression().isContentAware()) {
+						return true;
+					}
+				}
+			}
+		}
+		if (param.getChildParams() != null) {
+			Iterator<ConnectorParam> childParams = param.getChildParams().iterator();
+			while (childParams.hasNext()) {
+				ConnectorParam childParam = childParams.next();
+				if (isContentAware(childParam)) {
 					return true;
 				}
 			}
@@ -263,7 +300,7 @@ public class InvokeMediator extends AbstractMediator implements
 				        (FlowContinuableMediator) templateMediator.getChild(continuationState.getPosition());
 
 		        result = mediator.mediate(synCtx, continuationState.getChildContState());
-				postMediate(synCtx);
+//				postMediate(synCtx);
 
 				if (isStatisticsEnabled) {
 					((Mediator) mediator).reportCloseStatistics(synCtx, null);
@@ -304,14 +341,18 @@ public class InvokeMediator extends AbstractMediator implements
 	 * @param templateQualifiedName
 	 */
 	private void populateParameters(MessageContext synCtx, String templateQualifiedName) {
-		Iterator<String> params = pName2ExpressionMap.keySet().iterator();
+		Iterator<String> params = pName2ParamMap.keySet().iterator();
 		while (params.hasNext()) {
 			String parameter = params.next();
 			if (!"".equals(parameter)) {
-				Value expression = pName2ExpressionMap.get(parameter);
-				if (expression != null) {
-					EIPUtils.createSynapseEIPTemplateProperty(synCtx, templateQualifiedName,
-					                                          parameter, expression);
+				ConnectorParam connectorParam = pName2ParamMap.get(parameter);
+				if (connectorParam.getChildParams().isEmpty() && connectorParam.getAttributeName2ExpressionMap().isEmpty()) {
+					// Store the inline expression value directly in the Synapse context instead of InvokeParam object
+					// if there are no nested parameters, ensuring backward compatibility.
+					Value expression = connectorParam.getInlineValue();
+					EIPUtils.createSynapseEIPTemplateProperty(synCtx, templateQualifiedName, parameter, expression);
+				} else {
+					EIPUtils.createSynapseEIPTemplateProperty(synCtx, templateQualifiedName, parameter, connectorParam);
 				}
 			}
 		}
@@ -319,8 +360,8 @@ public class InvokeMediator extends AbstractMediator implements
 
     private boolean storeResponseInVariableEnabled(MessageContext synCtx) {
 
-        if (pName2ExpressionMap.containsKey(SynapseConstants.RESPONSE_VARIABLE)) {
-            Value responseVariable = pName2ExpressionMap.get(SynapseConstants.RESPONSE_VARIABLE);
+        if (pName2ParamMap.containsKey(SynapseConstants.RESPONSE_VARIABLE)) {
+            Value responseVariable = pName2ParamMap.get(SynapseConstants.RESPONSE_VARIABLE).getInlineValue();
             if (responseVariable != null) {
                 String responseVariableValue = responseVariable.evaluateValue(synCtx);
                 if (log.isDebugEnabled()) {
@@ -346,7 +387,7 @@ public class InvokeMediator extends AbstractMediator implements
         if (!storeResponseInVariableEnabled(synCtx)) {
             return;
         }
-        Value overwriteBodyValue = pName2ExpressionMap.get(SynapseConstants.OVERWRITE_BODY);
+        Value overwriteBodyValue = pName2ParamMap.get(SynapseConstants.OVERWRITE_BODY).getInlineValue();
         boolean overwriteBody = false;
         if (overwriteBodyValue != null) {
             overwriteBody = Boolean.parseBoolean(overwriteBodyValue.evaluateValue(synCtx));
@@ -382,8 +423,8 @@ public class InvokeMediator extends AbstractMediator implements
         if (!storeResponseInVariableEnabled(synCtx)) {
             return;
         }
-        boolean overwriteBody = Boolean.parseBoolean(pName2ExpressionMap.get(
-                SynapseConstants.OVERWRITE_BODY).evaluateValue(synCtx));
+        boolean overwriteBody = Boolean.parseBoolean(pName2ParamMap.get(
+                SynapseConstants.OVERWRITE_BODY).getInlineValue().evaluateValue(synCtx));
         processConnectorResponse(synCtx, overwriteBody);
         if (!overwriteBody) {
             Map originalTransportHeaders =
@@ -445,6 +486,10 @@ public class InvokeMediator extends AbstractMediator implements
 		pName2ExpressionMap.put(pName, expr);
 	}
 
+	public void addInvokeParam(String pName, ConnectorParam param) {
+		pName2ParamMap.put(pName, param);
+	}
+
 	public boolean isDynamicMediator() {
 		return dynamicMediator;
 	}
@@ -495,14 +540,14 @@ public class InvokeMediator extends AbstractMediator implements
 
     private void processConnectorResponse(MessageContext synCtx, boolean overwriteBody) {
 
-        String responseVariableName = pName2ExpressionMap.get(SynapseConstants.RESPONSE_VARIABLE).evaluateValue(synCtx);
+        String responseVariableName = pName2ParamMap.get(SynapseConstants.RESPONSE_VARIABLE).getInlineValue().evaluateValue(synCtx);
         ConnectorResponse connectorResponse = (ConnectorResponse) synCtx.getVariable(responseVariableName);
         Map<String, Object> responseMap = new HashMap<>();
         if (connectorResponse == null) {
             Source sourceForResponsePayload = MediatorEnrichUtil.createSourceWithBody();
             Target targetForResponsePayload = new Target();
             targetForResponsePayload.setTargetType(EnrichMediator.VARIABLE);
-            targetForResponsePayload.setVariable(pName2ExpressionMap.get(SynapseConstants.RESPONSE_VARIABLE));
+            targetForResponsePayload.setVariable(pName2ParamMap.get(SynapseConstants.RESPONSE_VARIABLE).getInlineValue());
             doEnrich(synCtx, sourceForResponsePayload, targetForResponsePayload);
             if (overwriteBody) {
                 // If overwrite body is enabled, no need to store the payload in the variable

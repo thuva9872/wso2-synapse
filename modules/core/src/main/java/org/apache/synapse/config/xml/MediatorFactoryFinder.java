@@ -24,6 +24,7 @@ import org.apache.axiom.om.OMAttribute;
 import org.apache.axiom.om.OMElement;
 import org.apache.axiom.om.OMNode;
 import org.apache.axiom.om.util.AXIOMUtil;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.synapse.Mediator;
@@ -36,6 +37,7 @@ import org.apache.synapse.libraries.imports.SynapseImport;
 import org.apache.synapse.libraries.model.Library;
 import org.apache.synapse.mediators.Value;
 import org.apache.synapse.mediators.template.InvokeMediator;
+import org.apache.synapse.mediators.template.ConnectorParam;
 
 import javax.xml.namespace.QName;
 import javax.xml.stream.XMLStreamException;
@@ -370,20 +372,65 @@ public class MediatorFactoryFinder implements XMLToObjectMapper {
 
     }
 
-	private void buildParamteres(OMElement connectorElem, InvokeMediator invokeMediator) {
-		Iterator parameters = connectorElem.getChildElements();
+    private void buildParamteres(OMElement connectorElem, InvokeMediator invokeMediator) {
+
+        Iterator parameters = connectorElem.getChildElements();
         while (parameters.hasNext()) {
             OMNode paramNode = (OMNode) parameters.next();
             if (paramNode instanceof OMElement) {
-                String paramName = ((OMElement) paramNode).getLocalName(); //((OMElement) paramNode).getAttributeValue(new QName("name"));
-                String paramValueStr = ((OMElement) paramNode).getText();//((OMElement) paramNode).getAttributeValue(new QName("value"));
-                if (paramName != null && !paramName.equals("")
-                        && paramValueStr != null
-                        && !paramValueStr.equals("")) {
-                    Value paramValue = new ValueFactory().createTextValue((OMElement) paramNode);
-                    invokeMediator.addExpressionForParamName(paramName, paramValue);
-                }
+                String paramName = ((OMElement) paramNode).getLocalName();
+                invokeMediator.addInvokeParam(paramName, createConnectorParam((OMElement) paramNode));
             }
         }
-	}
+    }
+
+    private ConnectorParam createConnectorParam(OMElement paramNode) {
+
+        String paramName = paramNode.getLocalName();
+        ConnectorParam connectorParam = new ConnectorParam();
+        connectorParam.setParamName(paramName);
+        Iterator attributesIterator = paramNode.getAllAttributes();
+        while (attributesIterator.hasNext()) {
+            OMAttribute attribute = (OMAttribute) attributesIterator.next();
+            String attributeName = attribute.getLocalName();
+            String attributeValue = attribute.getAttributeValue();
+            if (StringUtils.isNotEmpty(attributeName) && StringUtils.isNotEmpty(attributeValue)) {
+                Value value = new ValueFactory().createValue(attributeName, paramNode);
+                connectorParam.addAttribute2Expression(attributeName, value);
+            }
+        }
+        Iterator childParams = paramNode.getChildElements();
+        if (childParams.hasNext()) {
+            do {
+                ConnectorParam childParam = createConnectorParam((OMElement) childParams.next());
+                if (childParam != null) {
+                    connectorParam.addChildParam(childParam);
+                }
+            } while (childParams.hasNext());
+        } else {
+            String paramValueStr = paramNode.getText();
+            if (StringUtils.isNotEmpty(paramName) && StringUtils.isNotEmpty(paramValueStr)) {
+                Value paramValue = new ValueFactory().createTextValue(paramNode);
+                connectorParam.setInlineValue(paramValue);
+            }
+        }
+        return connectorParam;
+    }
+
+//	private void buildParamteres(OMElement connectorElem, InvokeMediator invokeMediator) {
+//		Iterator parameters = connectorElem.getChildElements();
+//        while (parameters.hasNext()) {
+//            OMNode paramNode = (OMNode) parameters.next();
+//            if (paramNode instanceof OMElement) {
+//                String paramName = ((OMElement) paramNode).getLocalName(); //((OMElement) paramNode).getAttributeValue(new QName("name"));
+//                String paramValueStr = ((OMElement) paramNode).getText();//((OMElement) paramNode).getAttributeValue(new QName("value"));
+//                if (paramName != null && !paramName.equals("")
+//                        && paramValueStr != null
+//                        && !paramValueStr.equals("")) {
+//                    Value paramValue = new ValueFactory().createTextValue((OMElement) paramNode);
+//                    invokeMediator.addExpressionForParamName(paramName, paramValue);
+//                }
+//            }
+//        }
+//	}
 }

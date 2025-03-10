@@ -95,7 +95,7 @@ public class MediatorWorker implements Runnable {
             }
 
             // If this is a scatter message, then we need to use the clone the continuation state and continue the mediation
-            if (Utils.isScatterMessage(synCtx)) {
+            if (Utils.isScatterMessage(synCtx) || Utils.isAgentToolExecution(synCtx)) {
                 SeqContinuationState seqContinuationState = (SeqContinuationState) ContinuationStackManager.peakContinuationStateStack(synCtx);
                 if (seqContinuationState == null) {
                     log.error("Sequence Continuation State cannot be found in the stack, hence cannot continue the mediation.");
