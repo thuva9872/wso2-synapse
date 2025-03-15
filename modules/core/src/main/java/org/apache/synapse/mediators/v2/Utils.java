@@ -40,7 +40,6 @@ import org.apache.synapse.config.xml.XMLConfigConstants;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 
 import java.io.ByteArrayInputStream;
-import javax.xml.namespace.QName;
 
 public class Utils {
 
@@ -58,6 +57,20 @@ public class Utils {
 
         Boolean isScatterMessage = (Boolean) synCtx.getProperty(SynapseConstants.SCATTER_MESSAGES);
         return isScatterMessage != null && isScatterMessage;
+    }
+
+    /**
+     * Checks if the message should continue from the continuation state when injected into a sequence
+     * using {@link org.apache.synapse.core.SynapseEnvironment#injectAsync}.
+     *
+     * @param synCtx the message context
+     * @return {@code true} if the message should continue from the continuation state, {@code false} otherwise
+     */
+    public static boolean mustContinueMediationFromContinuationState(MessageContext synCtx) {
+
+        Boolean needContinuation =
+                (Boolean) synCtx.getProperty(SynapseConstants.CONTINUE_MEDIATION_FROM_CONTINUATION_STATE);
+        return needContinuation != null && needContinuation;
     }
 
     /**
